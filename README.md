@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/rekanalar/goose-glob/actions/workflows/ci.yml/badge.svg)](https://github.com/rekanalar/goose-glob/actions/workflows/ci.yml)
 
-Glob pattern matching and path tools for the Goose programming language.
+Glob pattern matching and path tools for the [Goose](https://github.com/aardappel/goose) programming language.
 
 ## Features
 
