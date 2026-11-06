@@ -2,9 +2,21 @@ name: probe
 on:
   push:
     branches: [main]
+permissions:
+  contents: read
 jobs:
   hello:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOOSE_HOME: ${{ runner.temp }}/goose-home
     steps:
       - uses: actions/checkout@v4
       - run: echo hello
