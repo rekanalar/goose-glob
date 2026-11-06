@@ -167,6 +167,23 @@ fn test_walk() {
     assert(none.len == 0);
 }
 
+// test_limits checks the limits against a hostile pattern.
+fn test_limits() {
+    // A pattern with many groups does not expand. It stays one pattern.
+    var pat: u8[>..] = [];
+    for i in 0..30 { pat.append("{a,b}"); }
+    assert(!glob::matches("x", pat));
+    assert(!glob::matches("a", pat));
+
+    // A pattern with many stars does not take a long time.
+    var stars: u8[>..] = [];
+    for i in 0..20 { stars.append("*a"); }
+    stars.append("b");
+    var path: u8[>..] = [];
+    for i in 0..20 { path.append("a"); }
+    assert(!glob::matches(path, stars));
+}
+
 fn main() {
     test_star();
     test_question_mark();
@@ -180,6 +197,7 @@ fn main() {
     test_ext();
     test_normalize();
     test_walk();
+    test_limits();
     print("all tests passed");
     return 0;
 }

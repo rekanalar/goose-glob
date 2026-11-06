@@ -1,12 +1,13 @@
 // The directory walk for the glob package. Pure Goose. No C.
 //
-// The walk uses the standard library "os" module. It reads a directory,
-// takes the names it finds, and keeps the ones that match the pattern.
+// The walk uses the standard library "os" module. It reads a directory.
+// It keeps the names that match the pattern.
 //
 // The walk is recursive. Goose does not allow a growable value to be live
 // across a recursive call (docs/reference.md, section 19). The walk keeps
-// its two buffers outside the recursive function and passes them in. The
-// buffers are grow-only, so a slice into one stays valid when it grows.
+// its two buffers outside the recursive function. It passes them in.
+//
+// The buffers are grow-only. A slice into one stays valid when it grows.
 
 namespace glob;
 
@@ -35,8 +36,8 @@ fn walk(out: u8[>..]&, dir: u8[:], pattern: u8[:]) {
 // walk_dir is the recursive part of the walk.
 //
 // The names buffer holds the directory listings. The path buffer holds the
-// path of the directory that is being read. A child appends its name to
-// the path buffer and removes it again when it returns.
+// path of the directory that the walk reads. A child appends its name to
+// the path buffer. It removes the name when it returns.
 recursive fn walk_dir(out: u8[>..]&, names: u8[>..]&, path: u8[>..]&, pattern: u8[:], skip: i64) {
     let first = names.len;
     list_dir(path, names);

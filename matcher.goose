@@ -1,8 +1,9 @@
-// The glob matcher for the glob package. Pure Goose. No C.
+// The glob matcher for the glob package.
 //
 // The matcher compares a path with a pattern. Both are byte slices. It
-// never copies them. The matcher never errors: a malformed pattern is
-// treated as a literal.
+// never copies them.
+//
+// A malformed pattern is a literal. The matcher never fails.
 //
 // Pattern syntax:
 //
@@ -17,9 +18,8 @@
 //
 // The matcher works in three steps.
 //
-// First it expands the brace groups. It writes each alternative into a
-// list of patterns. The expansion runs in rounds. Each round takes the
-// first group of every pattern and replaces it with its alternatives.
+// First it expands the brace groups. Each round takes the first group of
+// every pattern. It replaces the group with its alternatives.
 //
 // Second it splits the path and the pattern into segments. A segment is
 // the part between two separators.
@@ -49,10 +49,24 @@ fn matches(path: u8[:], pattern: u8[:]) -> bool {
     return false;
 }
 
+// The most alternatives a pattern may give. A pattern with more gives a
+// literal. The limit keeps a pattern from a program that takes input from
+// a user from exhausting the memory of the machine.
+const MAX_VARIANTS = 4096;
+
 // expand writes every alternative of the pattern into a list. The
 // alternatives are separated by a zero byte. A pattern without a group
 // gives one alternative: the pattern itself.
+//
+// A pattern with too many alternatives is not expanded. It stays one
+// pattern, and its braces are literal.
 fn expand(pattern: u8[:]) -> u8[>..] {
+    if variant_count(pattern, MAX_VARIANTS) > MAX_VARIANTS {
+        var one: u8[>..] = [];
+        one.append(pattern);
+        one.push(0);
+        return one;
+    }
     var work: u8[>..] = [];
     var next: u8[>..] = [];
     var out: u8[>..] = [];
@@ -124,6 +138,96 @@ fn expand_round(work: u8[>..]&, next: u8[>..]&, out: u8[>..]&) -> bool {
         i = j + 1;
     }
     return pending;
+}
+
+// variant_count returns the number of patterns the brace groups of the
+// pattern give. It stops at the limit, so a count above the limit comes
+// back as the limit plus one.
+recursive fn variant_count(pattern: u8[:], limit: i64) -> i64 {
+    var total = 1;
+    var i = 0;
+    while i < pattern.len {
+        let c = pattern[i];
+        if c == '[' {
+            i = skip_class(pattern, i);
+            continue;
+        }
+        if c == '\\' {
+            i += 2;
+            continue;
+        }
+        if c == '{' {
+            let close = find_close(pattern, i);
+            if close < 0 {
+                i += 1;
+                continue;
+            }
+            let count = group_count(pattern, i, close, limit);
+            total *= count;
+            if total > limit { return limit + 1; }
+            i = close + 1;
+            continue;
+        }
+        i += 1;
+    }
+    return total;
+}
+
+// group_count returns the number of patterns the group from open to close
+// gives.
+recursive fn group_count(pattern: u8[:], open: i64, close: i64, limit: i64) -> i64 {
+    var count = 0;
+    var start = open + 1;
+    var k = open + 1;
+    while k < close {
+        let c = pattern[k];
+        if c == '[' {
+            k = skip_class(pattern, k);
+            continue;
+        }
+        if c == '\\' {
+            k += 2;
+            continue;
+        }
+        if c == '{' {
+            let inner = find_close(pattern, k);
+            k += if inner < 0 { 1 } else { inner + 1 };
+            continue;
+        }
+        if c == ',' {
+            count += 1;
+            start = k + 1;
+        }
+        k += 1;
+    }
+    count += 1;
+    // A group with alternatives gives the product of them.
+    var total = 0;
+    var s = open + 1;
+    var j = open + 1;
+    while j < close {
+        let c = pattern[j];
+        if c == '[' {
+            j = skip_class(pattern, j);
+            continue;
+        }
+        if c == '\\' {
+            j += 2;
+            continue;
+        }
+        if c == '{' {
+            let inner = find_close(pattern, j);
+            j += if inner < 0 { 1 } else { inner + 1 };
+            continue;
+        }
+        if c == ',' {
+            total += variant_count(pattern[s..j], limit);
+            s = j + 1;
+        }
+        j += 1;
+    }
+    total += variant_count(pattern[s..close], limit);
+    return total;
 }
 
 // add_variant writes one alternative into the list. The alternative is the
@@ -232,42 +336,94 @@ recursive fn match_segments(path: const u8[:][>..]&, pat: const u8[:][>..]&, pi:
 
 // match_segment matches one path segment against one pattern segment. The
 // segment holds no separator, so a '*' in it matches any bytes.
-recursive fn match_segment(path: u8[:], pat: u8[:]) -> bool {
-    return match_seg(path, 0, pat, 0);
-}
+//
+// The matcher uses a table of reachable positions. The table holds one
+// entry for every position in the path. The table grows with the path. It
+// never grows with the pattern.
+//
+// The table keeps the work linear in the size of the path. A backtracking
+// matcher can take a long time on a pattern with many stars.
+fn match_segment(path: u8[:], pat: u8[:]) -> bool {
+    // reached[i] is true when the part of the pattern that is done
+    // matches the first i bytes of the path.
+    var reached: bool[>..] = [];
+    for i in 0..path.len + 1 { reached.push(i == 0); }
 
-// match_seg matches the path from p against the pattern from s. It backs
-// up over a '*' when the rest does not match.
-recursive fn match_seg(path: u8[:], p: i64, pat: u8[:], s: i64) -> bool {
-    if s >= pat.len { return p >= path.len; }
-    let c = pat[s];
-    if c == '*' {
-        // The star matches no bytes, then one byte more each time.
-        if match_seg(path, p, pat, s + 1) { return true; }
-        if p < path.len { return match_seg(path, p + 1, pat, s); }
-        return false;
-    }
-    if c == '?' {
-        if p >= path.len { return false; }
-        return match_seg(path, p + 1, pat, s + 1);
-    }
-    if c == '[' {
-        let after = class_end(pat, s);
-        if after == 0 {
-            // An unterminated class is a literal.
-            if p >= path.len || path[p] != '[' { return false; }
-            return match_seg(path, p + 1, pat, s + 1);
+    var p = 0;
+    while p < pat.len {
+        let c = pat[p];
+        if c == '*' {
+            // A star reaches every position after the first one that the
+            // pattern reached. Skip the other stars.
+            while p < pat.len && pat[p] == '*' { p += 1; }
+            var i = 1;
+            while i < reached.len {
+                if reached[i - 1] { reached[i] = true; }
+                i += 1;
+            }
+            continue;
         }
-        if p >= path.len { return false; }
-        if !class_has(pat, s, after, path[p]) { return false; }
-        return match_seg(path, p + 1, pat, after);
+        if c == '?' {
+            // A question mark reaches the next position, but not past a
+            // separator. The segment holds no separator.
+            var i = reached.len;
+            while i > 1 {
+                i -= 1;
+                reached[i] = reached[i - 1];
+            }
+            reached[0] = false;
+            p += 1;
+            continue;
+        }
+        if c == '[' {
+            let after = class_end(pat, p);
+            if after == 0 {
+                // An unterminated class is a literal.
+                var i = reached.len;
+                while i > 1 {
+                    i -= 1;
+                    let ok = reached[i - 1] && i - 1 < path.len && path[i - 1] == '[';
+                    reached[i] = ok;
+                }
+                reached[0] = false;
+                p += 1;
+                continue;
+            }
+            // A class reaches the next position when the byte is in the
+            // class.
+            var i = reached.len;
+            while i > 1 {
+                i -= 1;
+                let ok = reached[i - 1] && i - 1 < path.len && class_has(pat, p, after, path[i - 1]);
+                reached[i] = ok;
+            }
+            reached[0] = false;
+            p = after;
+            continue;
+        }
+        if c == '\\' && p + 1 < pat.len {
+            // An escaped byte is a literal.
+            var i = reached.len;
+            while i > 1 {
+                i -= 1;
+                let ok = reached[i - 1] && i - 1 < path.len && path[i - 1] == pat[p + 1];
+                reached[i] = ok;
+            }
+            reached[0] = false;
+            p += 2;
+            continue;
+        }
+        // A literal byte.
+        var i = reached.len;
+        while i > 1 {
+            i -= 1;
+            let ok = reached[i - 1] && i - 1 < path.len && path[i - 1] == c;
+            reached[i] = ok;
+        }
+        reached[0] = false;
+        p += 1;
     }
-    if c == '\\' && s + 1 < pat.len {
-        if p >= path.len || path[p] != pat[s + 1] { return false; }
-        return match_seg(path, p + 1, pat, s + 2);
-    }
-    if p >= path.len || path[p] != c { return false; }
-    return match_seg(path, p + 1, pat, s + 1);
+    return reached[path.len];
 }
 
 // class_end returns the index after the class that starts at pos. It
