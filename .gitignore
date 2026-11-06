@@ -5,3 +5,7 @@
 *.a
 /build/
 /out/
+
+# Test output
+/glob-example/
+/glob-test-tree/
