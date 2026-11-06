@@ -38,6 +38,7 @@ jobs:
           tar -xzf "$dest/goose.tar.gz" -C "$dest"
           exe=$(find "$dest" -type f -name goose | head -1)
           chmod +x "$exe"
+          export PATH="$(dirname "$exe"):$PATH"
           echo "$(dirname "$exe")" >> "$GITHUB_PATH"
           goose --help | head -3
 
