@@ -20,8 +20,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      GOOSE_HOME: ${{ runner.temp }}/goose-home
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +43,10 @@ jobs:
 
       - name: Check the entry file
         run: goose check glob.goose
+        env:
+          GOOSE_HOME: ${{ runner.temp }}/goose-home
 
       - name: Run the test suite
         run: goose run test/run.goose
+        env:
+          GOOSE_HOME: ${{ runner.temp }}/goose-home
