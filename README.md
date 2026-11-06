@@ -1,5 +1,7 @@
 # goose-glob
 
+[![ci](https://github.com/rekanalar/goose-glob/actions/workflows/ci.yml/badge.svg)](https://github.com/rekanalar/goose-glob/actions/workflows/ci.yml)
+
 Glob pattern matching and path tools for Goose.
 
 ## Features
