@@ -15,3 +15,5 @@ import paths;
 import matcher;
 import walk;
 import sets;
+import name;
+import capture;

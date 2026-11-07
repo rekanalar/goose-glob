@@ -5,6 +5,7 @@
 
 import std;
 import glob from "..";
+import cases;
 
 fn test_star() {
     assert(glob::matches("main.goose", "*.goose"));
@@ -200,21 +201,132 @@ fn test_sets() {
     assert(!glob::matches_set("a.js", ""));
 }
 
+// many_groups writes a pattern with many groups into the buffer. The
+// pattern has too many alternatives to expand.
+fn many_groups(out: u8[>..]&) {
+    for i in 0..30 { out.append("{a,b}"); }
+}
+
+// many_stars writes a pattern with many stars into the buffer. It ends
+// with a byte that the text does not hold.
+fn many_stars(out: u8[>..]&) {
+    for i in 0..20 { out.append("*a"); }
+    out.append("b");
+}
+
+// many_stars_text writes a text of many bytes into the buffer.
+fn many_stars_text(out: u8[>..]&) {
+    for i in 0..20 { out.append("a"); }
+}
+
 // test_limits checks the limits against a hostile pattern.
 fn test_limits() {
     // A pattern with many groups does not expand. It stays one pattern.
     var pat: u8[>..] = [];
-    for i in 0..30 { pat.append("{a,b}"); }
+    many_groups(pat);
     assert(!glob::matches("x", pat));
     assert(!glob::matches("a", pat));
 
     // A pattern with many stars does not take a long time.
     var stars: u8[>..] = [];
-    for i in 0..20 { stars.append("*a"); }
-    stars.append("b");
+    many_stars(stars);
     var path: u8[>..] = [];
-    for i in 0..20 { path.append("a"); }
+    many_stars_text(path);
     assert(!glob::matches(path, stars));
+}
+
+// test_match_name checks the match of one name. The rule is the rule
+// of Python fnmatch. A separator is an ordinary byte in a name.
+fn test_match_name() {
+    assert(glob::match_name("notes.txt", "*.txt"));
+    assert(!glob::match_name("notes.md", "*.txt"));
+    assert(glob::match_name("abc", "a?c"));
+    assert(!glob::match_name("ac", "a?c"));
+    assert(glob::match_name("abc", "a[bc]c"));
+    assert(!glob::match_name("abc", "a[!bc]c"));
+    assert(!glob::match_name("axc", "a[bc]c"));
+    // A star crosses a separator in a name.
+    assert(glob::match_name("dir/notes.txt", "*.txt"));
+    assert(glob::match_name("notes.txt", "*"));
+    // A group of alternatives works in a name.
+    assert(glob::match_name("b.txt", "{a,b}.txt"));
+    // A separator is an ordinary byte.
+    assert(glob::match_name("a/b.txt", "a/b.txt"));
+    // A malformed pattern is a literal.
+    assert(glob::match_name("[abc", "[abc"));
+    assert(glob::match_name("{a,b", "{a,b"));
+    assert(glob::match_name("a*b", "a\\*b"));
+    // The 200 cases of Python fnmatch.
+    cases::check_names();
+}
+
+// test_capture checks the parts of a match. The rule of the match is
+// the rule of matches.
+fn test_capture() {
+    var out: u8[>..] = [];
+    // A star gives a part.
+    assert(glob::capture(out, "axbyc", "a*b*c") == 2);
+    assert(out == "x\ny");
+    // A class gives the byte that it matched.
+    assert(glob::capture(out, "abc", "a[bc]c") == 1);
+    assert(out == "b");
+    // A group gives the text of the alternative that matched.
+    assert(glob::capture(out, "a", "{a,b}") == 1);
+    assert(out == "a");
+    // A question mark gives no part.
+    assert(glob::capture(out, "abc", "a?c") == 0);
+    assert(out == "");
+    // A text that does not match gives -1.
+    assert(glob::capture(out, "a/b/c", "a/*") == -1);
+    // A star of the segments takes the text of the segments.
+    assert(glob::capture(out, "a/b/c", "**") == 1);
+    assert(out == "a/b/c");
+    // A star of the segments that takes no segment gives an empty part.
+    assert(glob::capture(out, "a/c.txt", "a/**/c.txt") == 1);
+    assert(out == "");
+    // The 200 cases of Node micromatch.
+    cases::check_captures();
+}
+
+// test_capture_limits checks the limits of the capture against a
+// hostile pattern.
+fn test_capture_limits() {
+    var out: u8[>..] = [];
+    // A pattern with many groups does not expand.
+    var pat: u8[>..] = [];
+    many_groups(pat);
+    assert(glob::capture(out, "x", pat) == -1);
+    assert(glob::match_name("x", pat) == false);
+    // A pattern with many stars does not take a long time.
+    var stars: u8[>..] = [];
+    many_stars(stars);
+    var path: u8[>..] = [];
+    many_stars_text(path);
+    assert(glob::capture(out, path, stars) == -1);
+    // A pattern with many segments and a text with many segments give -1.
+    // The table of the capture would need too many entries.
+    var wide: u8[>..] = [];
+    for i in 0..1100 { wide.append("a"); wide.push(47); }
+    wide.append("a");
+    var wtext: u8[>..] = [];
+    for i in 0..1100 { wtext.append("a"); wtext.push(47); }
+    wtext.append("a");
+    assert(glob::capture(out, wtext, wide) == -1);
+    // The tables of all the alternatives count together. A pattern with
+    // many alternatives and a long text gives -1 without a long time.
+    var alts: u8[>..] = [];
+    for i in 0..11 { alts.append("{a,b}"); alts.push(47); }
+    alts.append("a");
+    var atext: u8[>..] = [];
+    for i in 0..2000 { atext.append("a"); atext.push(47); }
+    atext.append("a");
+    assert(glob::capture(out, atext, alts) == -1);
+    // The expansion of the alternatives must stay small. A long pattern
+    // with many alternatives gives -1 without much memory.
+    var big: u8[>..] = [];
+    for i in 0..12 { big.append("{a,b}"); }
+    for i in 0..20000 { big.append("x"); }
+    assert(glob::capture(out, "b", big) == -1);
 }
 
 fn main() {
@@ -232,6 +344,9 @@ fn main() {
     test_walk();
     test_sets();
     test_limits();
+    test_match_name();
+    test_capture();
+    test_capture_limits();
     print("all tests passed");
     return 0;
 }

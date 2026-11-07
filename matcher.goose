@@ -108,30 +108,12 @@ fn expand_round(work: u8[>..]&, next: u8[>..]&, out: u8[>..]&) -> bool {
                 out.push(0);
             } else {
                 // The alternatives are the parts between the commas.
-                var start = g + 1;
-                var k = g + 1;
-                while k < close {
-                    let c = v[k];
-                    if c == '[' {
-                        k = skip_class(v, k);
-                        continue;
-                    }
-                    if c == '\\' {
-                        k += 2;
-                        continue;
-                    }
-                    if c == '{' {
-                        let inner = find_close(v, k);
-                        k += if inner < 0 { 1 } else { inner + 1 };
-                        continue;
-                    }
-                    if c == ',' {
-                        add_variant(next, v[..g], v[start..k], v[close + 1..]);
-                        start = k + 1;
-                    }
-                    k += 1;
+                var alst: i64[>..] = [];
+                var ale: i64[>..] = [];
+                split_alts(v, g, close, alst, ale);
+                for k in 0..alst.len {
+                    add_variant(next, v[..g], v[alst[k]..ale[k]], v[close + 1..]);
                 }
-                add_variant(next, v[..g], v[start..close], v[close + 1..]);
                 pending = true;
             }
         }
@@ -175,6 +157,10 @@ recursive fn variant_count(pattern: u8[:], limit: i64) -> i64 {
 
 // group_count returns the number of patterns the group from open to close
 // gives.
+//
+// The scan of the alternatives is its own. The function calls
+// variant_count, which calls this function again. A rule of the language
+// forbids a growable value in the scope of such a call.
 recursive fn group_count(pattern: u8[:], open: i64, close: i64, limit: i64) -> i64 {
     var count = 0;
     var start = open + 1;
@@ -201,7 +187,7 @@ recursive fn group_count(pattern: u8[:], open: i64, close: i64, limit: i64) -> i
         k += 1;
     }
     count += 1;
-    // A group with alternatives gives the product of them.
+    // A group with alternatives gives the sum of them.
     var total = 0;
     var s = open + 1;
     var j = open + 1;
@@ -302,18 +288,77 @@ fn skip_class(v: u8[:], open: i64) -> i64 {
 // can match it.
 fn split_segments(s: u8[:]) -> const u8[:][>..] {
     var out: const u8[:][>..] = [];
+    var starts: i64[>..] = [];
+    var ends: i64[>..] = [];
+    split_offsets(s, starts, ends);
+    for i in 0..starts.len { out.push(s[starts[i]..ends[i]]); }
+    return out;
+}
+
+// split_offsets writes the bounds of the parts of s between the
+// separators into starts and ends. The empty parts are dropped. An empty
+// input gives one empty part.
+fn split_offsets(s: u8[:], starts: i64[>..]&, ends: i64[>..]&) {
     var start = 0;
     var i = 0;
     while i < s.len {
         if s[i] == '/' {
-            if i > start { out.push(s[start..i]); }
+            if i > start {
+                starts.push(start);
+                ends.push(i);
+            }
             start = i + 1;
         }
         i += 1;
     }
-    if start < s.len { out.push(s[start..]); }
-    if out.len == 0 { out.push(s[..0]); }
-    return out;
+    if start < s.len {
+        starts.push(start);
+        ends.push(s.len);
+    }
+    if starts.len == 0 {
+        starts.push(0);
+        ends.push(0);
+    }
+}
+
+// split_alts writes the bounds of the alternatives of the group from g to
+// close into starts and ends. The alternatives are the parts between the
+// commas. A comma in a class, after a backslash or in a nested group does
+// not end an alternative.
+fn split_alts(v: u8[:], g: i64, close: i64, starts: i64[>..]&,
+    ends: i64[>..]&) {
+    var start = g + 1;
+    var k = g + 1;
+    while k < close {
+        let c = v[k];
+        if c == '[' {
+            k = skip_class(v, k);
+            continue;
+        }
+        if c == '\\' {
+            k += 2;
+            continue;
+        }
+        if c == '{' {
+            let inner = find_close(v, k);
+            k += if inner < 0 { 1 } else { inner + 1 };
+            continue;
+        }
+        if c == ',' {
+            starts.push(start);
+            ends.push(k);
+            start = k + 1;
+        }
+        k += 1;
+    }
+    starts.push(start);
+    ends.push(close);
+}
+
+// is_globstar tells whether the segment is a star of the segments. Such a
+// segment matches any number of segments.
+fn is_globstar(seg: u8[:]) -> bool {
+    return seg == "**";
 }
 
 // match_segments matches the path segments against the pattern segments.
@@ -321,7 +366,7 @@ fn split_segments(s: u8[:]) -> const u8[:][>..] {
 recursive fn match_segments(path: const u8[:][>..]&, pat: const u8[:][>..]&, pi: i64, si: i64) -> bool {
     if pi >= pat.len { return si >= path.len; }
     // A "**" segment matches any number of segments.
-    if pat[pi] == "**" {
+    if is_globstar(pat[pi]) {
         var k = si;
         while k <= path.len {
             if match_segments(path, pat, pi + 1, k) { return true; }
