@@ -10,7 +10,7 @@ Glob pattern matching and path tools for the [Goose](https://github.com/aardappe
 - Path helpers: `join`, `split`, `basename`, `dirname`, `ext`, `normalize`.
 - A directory walk that filters the files by a pattern.
 - Zero-copy. The functions read byte slices. They allocate only where the signature shows it.
-- Pure Goose. No C code.
+- Pure Goose, with one small C file that detects symbolic links.
 
 ## Install
 
@@ -74,6 +74,8 @@ keep a pattern from exhausting the machine.
 
 - A pattern with more than 4096 alternatives is not expanded. It stays one pattern.
 - The time of a match grows with the size of the path and the pattern. It never repeats work.
+- `walk` follows no symbolic link to a directory. It reports a link to a file as a file.
+- `walk` still gives no kind, no case setting and no negated pattern. See `packages/PROPOSAL.md` in the management repository.
 
 ## Test
 

@@ -15,13 +15,17 @@ import std;
 import os;
 import matcher;
 
+extern fn glob_is_symlink(path: const u8[:]) -> bool;
+
 // walk writes the paths under dir that match pattern into out. The paths
 // are relative to the current directory. They use '/' as the separator.
 //
 // The walk descends depth first. The names of a directory come sorted, so
 // the files of a directory come out in name order.
 //
-// The walk skips directories with a dot prefix.
+// The walk skips directories with a dot prefix. It follows no symbolic
+// link to a directory, as Go's WalkDir and Python's Path.walk do not.
+// It still reports a link to a file as a file.
 fn walk(out: u8[>..]&, dir: u8[:], pattern: u8[:]) {
     var names: u8[>..] = [];
     var path: u8[>..] = [];
@@ -57,7 +61,7 @@ recursive fn walk_dir(out: u8[>..]&, names: u8[>..]&, path: u8[>..]&, pattern: u
                     let p = path[0..path.len];
                     is_dir(p)
                 };
-                if is_directory {
+                if is_directory && !glob_is_symlink(path[0..path.len]) {
                     walk_dir(out, names, path, pattern, skip);
                 } else {
                     let rel = path[skip..path.len];

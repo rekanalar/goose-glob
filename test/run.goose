@@ -165,6 +165,11 @@ fn test_walk() {
     var none: u8[>..] = [];
     glob::walk(none, root, "*.md");
     assert(none.len == 0);
+
+    // test/tree holds a link to its own directory. The walk must not loop.
+    var looped: u8[>..] = [];
+    glob::walk(looped, "test/tree", "**/*.txt");
+    assert(looped == "one.txt");
 }
 
 // test_limits checks the limits against a hostile pattern.
