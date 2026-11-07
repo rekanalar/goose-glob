@@ -17,14 +17,14 @@ Glob pattern matching and path tools for the [Goose](https://github.com/aardappe
 Put this line in the root file of your program:
 
 ```goose
-import glob from "rekanalar/goose-glob@v0.1.1";
+import glob from "rekanalar/goose-glob@v0.2.0";
 ```
 
 ## Example
 
 ```goose
 import std;
-import glob from "rekanalar/goose-glob@v0.1.1";
+import glob from "rekanalar/goose-glob@v0.2.0";
 
 fn main() {
     print(glob::matches("src/main.goose", "**/*.goose"));   // true
