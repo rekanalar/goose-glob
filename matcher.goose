@@ -419,14 +419,9 @@ fn match_segment(path: u8[:], pat: u8[:]) -> bool {
             continue;
         }
         if c == '?' {
-            // A question mark reaches the next position, but not past a
-            // separator. The segment holds no separator.
-            var i = reached.len;
-            while i > 1 {
-                i -= 1;
-                reached[i] = reached[i - 1];
-            }
-            reached[0] = false;
+            // A question mark takes one code point, but not a separator.
+            // The segment holds no separator.
+            step_rune(reached, path, pat, p, 0);
             p += 1;
             continue;
         }
@@ -444,15 +439,8 @@ fn match_segment(path: u8[:], pat: u8[:]) -> bool {
                 p += 1;
                 continue;
             }
-            // A class reaches the next position when the byte is in the
-            // class.
-            var i = reached.len;
-            while i > 1 {
-                i -= 1;
-                let ok = reached[i - 1] && i - 1 < path.len && class_has(pat, p, after, path[i - 1]);
-                reached[i] = ok;
-            }
-            reached[0] = false;
+            // A class takes the next code point when it is in the class.
+            step_rune(reached, path, pat, p, after);
             p = after;
             continue;
         }
@@ -489,9 +477,56 @@ fn class_end(pat: u8[:], pos: i64) -> i64 {
     return end;
 }
 
-// class_has returns true when the byte c is in the class that starts at
-// pos and ends at end.
-fn class_has(pat: u8[:], pos: i64, end: i64, c: u8) -> bool {
+// rune_len gives the length of the UTF-8 sequence that starts at i. A
+// byte that starts no valid sequence counts as one.
+fn rune_len(s: u8[:], i: i64) -> i64 {
+    let c = s[i] as i64;
+    var n = 0;
+    if c >= 0xF0 && c < 0xF5 { n = 3; }
+    else if c >= 0xE0 && c < 0xF0 { n = 2; }
+    else if c >= 0xC2 && c < 0xE0 { n = 1; }
+    if n == 0 || i + n >= s.len { return 1; }
+    var k = 1;
+    while k <= n {
+        if (s[i + k] & 0xC0) != 0x80 { return 1; }
+        k += 1;
+    }
+    return n + 1;
+}
+
+// rune_at gives the code point that starts at i. A byte that starts no
+// valid sequence gives its value plus 0x200000, so it equals no code point.
+fn rune_at(s: u8[:], i: i64) -> i64 {
+    let n = rune_len(s, i);
+    let c = s[i] as i64;
+    if n == 1 { return if c < 0x80 { c } else { c + 0x200000 }; }
+    var cp = if n == 2 { c & 31 } else if n == 3 { c & 15 } else { c & 7 };
+    var k = 1;
+    while k < n {
+        cp = (cp << 6) | ((s[i + k] as i64) & 63);
+        k += 1;
+    }
+    return cp;
+}
+
+// step_rune moves the table over one code point of the path. The pattern
+// item is a question mark, or the class that starts at p and ends at end.
+fn step_rune(reached: bool[>..]&, path: u8[:], pat: u8[:], p: i64, end: i64) {
+    var next: bool[>..] = [];
+    for i in 0..reached.len { next.push(false); }
+    var i = 0;
+    while i < path.len {
+        if reached[i] && (end == 0 || class_has(pat, p, end, rune_at(path, i))) {
+            next[i + rune_len(path, i)] = true;
+        }
+        i += 1;
+    }
+    for i in 0..reached.len { reached[i] = next[i]; }
+}
+
+// class_has returns true when the code point cp is in the class that
+// starts at pos and ends at end.
+fn class_has(pat: u8[:], pos: i64, end: i64, cp: i64) -> bool {
     let body = pat[pos + 1..end - 1];
     if body.len == 0 { return false; }
     var negate = false;
@@ -502,13 +537,16 @@ fn class_has(pat: u8[:], pos: i64, end: i64, c: u8) -> bool {
     }
     var found = false;
     while i < body.len {
-        if i + 2 < body.len && body[i + 1] == '-' {
-            if c >= body[i] && c <= body[i + 2] { found = true; }
-            i += 3;
+        let a = rune_at(body, i);
+        let al = rune_len(body, i);
+        if i + al + 1 < body.len && body[i + al] == '-' {
+            let b = rune_at(body, i + al + 1);
+            if cp >= a && cp <= b { found = true; }
+            i += al + 1 + rune_len(body, i + al + 1);
             continue;
         }
-        if body[i] == c { found = true; }
-        i += 1;
+        if a == cp { found = true; }
+        i += al;
     }
     if negate { found = !found; }
     return found;

@@ -6,6 +6,7 @@
 import std;
 import glob from "..";
 import cases;
+import fold_cases;
 
 fn test_star() {
     assert(glob::matches("main.goose", "*.goose"));
@@ -187,6 +188,23 @@ fn test_walk() {
     assert(looped == "one.txt");
 }
 
+// A question mark and a class take one code point, not one byte.
+fn test_code_points() {
+    assert(glob::matches("é", "?"));
+    assert(glob::matches("aßb", "a?b"));
+    assert(!glob::matches("aßb", "a??b"));
+    assert(glob::matches("中", "[一-鿿]"));
+    assert(!glob::matches("a", "[一-鿿]"));
+    assert(glob::matches("é", "[!a]"));
+    assert(glob::match_name("éx", "?x"));
+    var cap: u8[>..] = [];
+    assert(glob::capture(cap, "éx", "?[x]") == 1);
+    assert(cap[..] == "x");
+    cap = [];
+    assert(glob::capture(cap, "éx", "[é]*") == 2);
+    assert(cap[..] == "é\nx");
+}
+
 // test_sets checks the lists and the case fold.
 fn test_sets() {
     assert(glob::matches_fold("README.MD", "*.md"));
@@ -257,7 +275,9 @@ fn test_match_name() {
     assert(glob::match_name("{a,b", "{a,b"));
     assert(glob::match_name("a*b", "a\\*b"));
     // The 200 cases of Python fnmatch.
+    test_code_points();
     cases::check_names();
+    fold_cases::check_fold_cases();
 }
 
 // test_capture checks the parts of a match. The rule of the match is

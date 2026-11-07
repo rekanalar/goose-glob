@@ -216,15 +216,17 @@ fn span_pair(kind: i64[:], ta: i64[:], tb: i64[:], t0: i64, n: i64,
             dp[i * w + l] = false;
         } else if k == TK_QM {
             for j in 0..l {
-                dp[i * w + j] = dp[(i + 1) * w + j + 1];
+                let rl = rune_len(text, ts + j);
+                dp[i * w + j] = j + rl <= l && dp[(i + 1) * w + j + rl];
             }
             dp[i * w + l] = false;
         } else if k == TK_CLASS {
             let p0 = ta[t0 + i];
             let p1 = tb[t0 + i];
             for j in 0..l {
-                let hit = class_has(seg, p0, p1, text[ts + j]);
-                dp[i * w + j] = hit && dp[(i + 1) * w + j + 1];
+                let rl = rune_len(text, ts + j);
+                let hit = j + rl <= l && class_has(seg, p0, p1, rune_at(text, ts + j));
+                dp[i * w + j] = hit && dp[(i + 1) * w + j + rl];
             }
             dp[i * w + l] = false;
         } else {
@@ -254,9 +256,11 @@ fn span_pair(kind: i64[:], ta: i64[:], tb: i64[:], t0: i64, n: i64,
             to.push(ts + e);
             j = e;
         } else {
+            var step = 1;
+            if k != TK_LIT { step = rune_len(text, ts + j); }
             from.push(ts + j);
-            to.push(ts + j + 1);
-            j += 1;
+            to.push(ts + j + step);
+            j += step;
         }
         i += 1;
     }

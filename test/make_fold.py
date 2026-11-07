@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# Makes fold_data.goose and test/fold_cases.goose from Python 3.14 (Unicode 16).
+# Simple fold: casefold when it is one code point, else lower when that is one.
+import fnmatch, random, sys, unicodedata
+
+def sfold(c):
+    f = c.casefold()
+    if len(f) == 1:
+        return f
+    l = c.lower()
+    return l if len(l) == 1 else c
+
+pairs = [(cp, ord(sfold(chr(cp)))) for cp in range(0x110000)
+         if not 0xD800 <= cp < 0xE000 and ord(sfold(chr(cp))) != cp]
+root = __file__.rsplit('/test/', 1)[0]
+with open(root + '/fold_data.goose', 'w') as f:
+    f.write('// The simple case fold of the code points. Python %s, Unicode %s.\n' % (sys.version.split()[0], unicodedata.unidata_version))
+    f.write('// Made by test/make_fold.py. Do not edit by hand.\nnamespace glob;\n\n')
+    f.write('const FOLD_COUNT: i64 = %d;\n\n' % len(pairs))
+    for name, idx in (('FROM', 0), ('TO', 1)):
+        f.write('const FOLD_%s: i64[%d] = [\n    %s,\n];\n\n' % (name, len(pairs), ', '.join('0x%X' % p[idx] for p in pairs)))
+
+def esc(s):
+    return '"' + ''.join('\\x%02x' % b for b in s.encode()) + '"'
+
+random.seed(20261107)
+alpha = ['a', 'B', 'k', 'K', 's', 'ſ', 'É', 'é', 'Δ', 'δ', 'Σ', 'ς', 'σ',
+         'Ж', 'ж', 'ẞ', 'ß', 'ᾈ', 'ᾀ', 'İ', 'i', '中', '1', '.']
+out = ['// Made by test/make_fold.py with Python fnmatch on the folded text. Do not edit by hand.',
+       'namespace fold_cases;', 'import glob from "..";', '',
+       'fn check(want: bool, path: const u8[:], pat: const u8[:]) {',
+       '    if glob::matches_fold(path, pat) != want { print("fold case differs: ", path, " ", pat); assert(false); }',
+       '}', '', 'fn check_fold_cases() {']
+n = 0
+for _ in range(1500):
+    p = ''.join(random.choice(alpha) for _ in range(random.randint(1, 5)))
+    if random.random() < 0.5:
+        pat = ''.join(random.choice(alpha) for _ in range(random.randint(1, 5)))
+        if random.random() < 0.6:
+            pat = ''.join(sfold(c) if random.random() < .5 else c.upper() for c in p)
+    else:
+        pat = ''.join(random.choice(['*', '?', c]) for c in p)
+    want = fnmatch.fnmatchcase(''.join(map(sfold, p)), ''.join(map(sfold, pat)))
+    out.append('    check(%s, %s, %s);' % ('true' if want else 'false', esc(p), esc(pat)))
+    n += 1
+out.append('}')
+open(root + '/test/fold_cases.goose', 'w').write('\n'.join(out) + '\n')
+sys.stderr.write('%d fold entries, %d cases\n' % (len(pairs), n))

@@ -14,6 +14,7 @@ import std;
 import paths;
 import matcher;
 import walk;
+import fold_data;
 import sets;
 import name;
 import capture;

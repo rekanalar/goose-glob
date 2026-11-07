@@ -19,7 +19,7 @@ Glob pattern matching and path tools for the [Goose](https://github.com/aardappe
 Put this line in the root file of your program:
 
 ```goose
-import glob from "rekanalar/goose-glob@v1.1.0";
+import glob from "rekanalar/goose-glob@v1.2.0";
 ```
 
 The CI runs the gate on Linux, macOS and Windows. It uses Goose v2026.4
@@ -29,7 +29,7 @@ and v2026.3 on each.
 
 ```goose
 import std;
-import glob from "rekanalar/goose-glob@v1.1.0";
+import glob from "rekanalar/goose-glob@v1.2.0";
 
 fn main() {
     print(glob::matches("src/main.goose", "**/*.goose"));   // true
@@ -72,7 +72,7 @@ The matcher reads bytes. The set `[a-c]` is a byte range.
 | `normalize(out, path)` | the lexical form of the path |
 | `walk(out, dir, pattern)` | the paths under dir that match the pattern |
 | `walk_with(out, dir, pattern, opts)` | like `walk`. Option 1 enters hidden names. Option 2 puts a kind and a tab before each path. |
-| `matches_fold(path, pattern)` | `matches` with no difference between the cases of ASCII letters |
+| `matches_fold(path, pattern)` | `matches` with no difference between the cases of Unicode letters |
 | `matches_any(path, patterns)` | true when one line of the list matches |
 | `matches_set(path, patterns)` | the list with `!` lines that remove paths. The last match decides. |
 
@@ -130,7 +130,8 @@ below keep a pattern from exhausting the machine.
 - The time of a match grows with the size of the path and the pattern. It never repeats work.
 - `walk` follows no symbolic link to a directory. It reports a link to a file as a file.
 - `walk_with` uses three kinds. `d` is a directory. `l` is a link to a directory. `f` is any other file.
-- The case fold covers ASCII letters only.
+- `matches_fold` uses the simple case fold of Unicode 16, from Python 3.14. The full fold is out, so `ß` does not match `SS`.
+- A `?` and a class take one code point. A byte that is not valid UTF-8 counts as one item.
 - The test of the loop guard needs a symbolic link. Windows checks the fixture out as a plain file, so the guard has no test there.
 - The capture follows the rules of matching of this package, and not the rules of `micromatch`. A star of the segments gives the text of the segments that it took. `micromatch` gives a different text for a path that starts with a separator.
 - The parts of a capture are separated by a newline byte. A part that holds a newline byte looks like a separator.
