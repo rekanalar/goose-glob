@@ -41,7 +41,11 @@ fn matches(path: u8[:], pattern: u8[:]) -> bool {
         if variants[i] == 0 {
             let v = variants[start..i];
             let v_parts = split_segments(v);
-            if match_segments(path_parts, v_parts, 0, 0) { return true; }
+            // The table marks the pairs of positions that failed. A pair
+            // fails once, so the work has a bound.
+            var failed: bool[>..] = [];
+            for f in 0..(v_parts.len + 1) * (path_parts.len + 1) { failed.push(false); }
+            if match_segments(path_parts, v_parts, 0, 0, failed) { return true; }
             start = i + 1;
         }
         i += 1;
@@ -363,20 +367,26 @@ fn is_globstar(seg: u8[:]) -> bool {
 
 // match_segments matches the path segments against the pattern segments.
 // It returns true when the rest of both lists match.
-recursive fn match_segments(path: const u8[:][>..]&, pat: const u8[:][>..]&, pi: i64, si: i64) -> bool {
+//
+// The failed table holds one entry for each pair of positions. A pair that
+// failed is not tried again. Without it, a pattern with many "**" segments
+// takes a time that grows with the power of the count.
+recursive fn match_segments(path: const u8[:][>..]&, pat: const u8[:][>..]&, pi: i64, si: i64, failed: bool[>..]&) -> bool {
     if pi >= pat.len { return si >= path.len; }
+    let key = pi * (path.len + 1) + si;
+    if failed[key] { return false; }
     // A "**" segment matches any number of segments.
     if is_globstar(pat[pi]) {
         var k = si;
         while k <= path.len {
-            if match_segments(path, pat, pi + 1, k) { return true; }
+            if match_segments(path, pat, pi + 1, k, failed) { return true; }
             k += 1;
         }
-        return false;
+    } else if si < path.len && match_segment(path[si], pat[pi]) {
+        if match_segments(path, pat, pi + 1, si + 1, failed) { return true; }
     }
-    if si >= path.len { return false; }
-    if !match_segment(path[si], pat[pi]) { return false; }
-    return match_segments(path, pat, pi + 1, si + 1);
+    failed[key] = true;
+    return false;
 }
 
 // match_segment matches one path segment against one pattern segment. The

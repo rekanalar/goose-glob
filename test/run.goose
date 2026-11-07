@@ -329,6 +329,21 @@ fn test_capture_limits() {
     assert(glob::capture(out, "b", big) == -1);
 }
 
+// test_globstar_chain checks a pattern with many "**" segments. It must end
+// at once. Before v1.0.1 the time grew with the power of the count.
+fn test_globstar_chain() {
+    var p: u8[>..] = [];
+    var t: u8[>..] = [];
+    for i in 0..40 { p.append("**/"); }
+    p.append("x");
+    for i in 0..60 { t.append("d/"); }
+    assert(!glob::matches(t[..], p[..]));
+    t.append("x");
+    assert(glob::matches(t[..], p[..]));
+    assert(glob::matches("a/b/c/a/b", "**/a/**/b"));
+    assert(!glob::matches("a/b/c", "**/a/**/d"));
+}
+
 fn main() {
     test_star();
     test_question_mark();
@@ -347,6 +362,7 @@ fn main() {
     test_match_name();
     test_capture();
     test_capture_limits();
+    test_globstar_chain();
     print("all tests passed");
     return 0;
 }
