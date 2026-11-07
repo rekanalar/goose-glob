@@ -166,10 +166,38 @@ fn test_walk() {
     glob::walk(none, root, "*.md");
     assert(none.len == 0);
 
+    var kinds: u8[>..] = [];
+    glob::walk_with(kinds, root, "**", 2);
+    assert(kinds == "f\ta.goose\nf\tb.txt\nd\tsub\nf\tsub/c.goose");
+
+    var dot: u8[>..] = [];
+    glob::join2(dot, root, ".hid");
+    write_file(dot, "");
+    var plain: u8[>..] = [];
+    glob::walk(plain, root, "*");
+    assert(plain == "a.goose\nb.txt");
+    var shown: u8[>..] = [];
+    glob::walk_with(shown, root, ".*", 1);
+    assert(shown == ".hid");
+
     // test/tree holds a link to its own directory. The walk must not loop.
     var looped: u8[>..] = [];
     glob::walk(looped, "test/tree", "**/*.txt");
     assert(looped == "one.txt");
+}
+
+// test_sets checks the lists and the case fold.
+fn test_sets() {
+    assert(glob::matches_fold("README.MD", "*.md"));
+    assert(glob::matches_fold("Src/A.go", "src/[A-Z].GO"));
+    assert(!glob::matches("README.MD", "*.md"));
+    assert(glob::matches_any("a.go", "*.md\n*.go"));
+    assert(!glob::matches_any("a.rs", "*.md\n*.go"));
+    assert(glob::matches_set("a.md", "!*.js"));
+    assert(!glob::matches_set("a.js", "!*.js"));
+    assert(glob::matches_set("a.js", "*.js\n!b.js") == true);
+    assert(!glob::matches_set("b.js", "*.js\n!b.js"));
+    assert(!glob::matches_set("a.js", ""));
 }
 
 // test_limits checks the limits against a hostile pattern.
@@ -202,6 +230,7 @@ fn main() {
     test_ext();
     test_normalize();
     test_walk();
+    test_sets();
     test_limits();
     print("all tests passed");
     return 0;

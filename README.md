@@ -64,6 +64,10 @@ The matcher reads bytes. The set `[a-c]` is a byte range.
 | `ext(path)` | the extension, with its dot |
 | `normalize(out, path)` | the lexical form of the path |
 | `walk(out, dir, pattern)` | the paths under dir that match the pattern |
+| `walk_with(out, dir, pattern, opts)` | like `walk`. Option 1 enters hidden names. Option 2 puts a kind and a tab before each path. |
+| `matches_fold(path, pattern)` | `matches` with no difference between the cases of ASCII letters |
+| `matches_any(path, patterns)` | true when one line of the list matches |
+| `matches_set(path, patterns)` | the list with `!` lines that remove paths. The last match decides. |
 
 The paths in the result of `walk` are relative to `dir`. They use `/` as the separator.
 
@@ -75,7 +79,10 @@ keep a pattern from exhausting the machine.
 - A pattern with more than 4096 alternatives is not expanded. It stays one pattern.
 - The time of a match grows with the size of the path and the pattern. It never repeats work.
 - `walk` follows no symbolic link to a directory. It reports a link to a file as a file.
-- `walk` still gives no kind, no case setting and no negated pattern. See `packages/PROPOSAL.md` in the management repository.
+- `walk_with` uses three kinds. `d` is a directory. `l` is a link to a directory. `f` is any other file.
+- The case fold covers ASCII letters only.
+- There is no match for one name that lets `*` cross a separator, as Python `fnmatch` has.
+- There is no `capture` of the parts that a pattern matched.
 
 ## Test
 
