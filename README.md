@@ -19,14 +19,17 @@ Glob pattern matching and path tools for the [Goose](https://github.com/aardappe
 Put this line in the root file of your program:
 
 ```goose
-import glob from "rekanalar/goose-glob@v1.0.1";
+import glob from "rekanalar/goose-glob@v1.1.0";
 ```
+
+The CI runs the gate on Linux, macOS and Windows. It uses Goose v2026.4
+and v2026.3 on each.
 
 ## Example
 
 ```goose
 import std;
-import glob from "rekanalar/goose-glob@v1.0.1";
+import glob from "rekanalar/goose-glob@v1.1.0";
 
 fn main() {
     print(glob::matches("src/main.goose", "**/*.goose"));   // true
@@ -128,6 +131,7 @@ below keep a pattern from exhausting the machine.
 - `walk` follows no symbolic link to a directory. It reports a link to a file as a file.
 - `walk_with` uses three kinds. `d` is a directory. `l` is a link to a directory. `f` is any other file.
 - The case fold covers ASCII letters only.
+- The test of the loop guard needs a symbolic link. Windows checks the fixture out as a plain file, so the guard has no test there.
 - The capture follows the rules of matching of this package, and not the rules of `micromatch`. A star of the segments gives the text of the segments that it took. `micromatch` gives a different text for a path that starts with a separator.
 - The parts of a capture are separated by a newline byte. A part that holds a newline byte looks like a separator.
 
